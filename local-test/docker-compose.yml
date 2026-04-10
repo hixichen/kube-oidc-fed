@@ -1,0 +1,31 @@
+version: "3.8"
+services:
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio-data:/data
+
+  registry:
+    build:
+      context: ..
+      dockerfile: Dockerfile.registry
+    ports:
+      - "8080:8080"
+    environment:
+      REGISTRY_S3_BUCKET: kidring
+      REGISTRY_S3_REGION: us-east-1
+      REGISTRY_S3_ENDPOINT: http://minio:9000
+      REGISTRY_ISSUER: http://localhost:8080
+      REGISTRY_AUTH_TOKEN: local-test-token
+    depends_on:
+      - minio
+
+volumes:
+  minio-data:

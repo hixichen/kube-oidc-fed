@@ -1,0 +1,80 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kidring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kidring-registry
+  namespace: kidring
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kidring-registry
+  namespace: kidring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: kidring-registry
+  template:
+    metadata:
+      labels:
+        app: kidring-registry
+    spec:
+      serviceAccountName: kidring-registry
+      containers:
+      - name: registry
+        image: kidring-registry:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: REGISTRY_S3_BUCKET
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: s3_bucket
+        - name: REGISTRY_S3_REGION
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: s3_region
+        - name: REGISTRY_ISSUER
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: issuer
+        - name: REGISTRY_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kidring-auth
+              key: token
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kidring-registry
+  namespace: kidring
+spec:
+  selector:
+    app: kidring-registry
+  ports:
+  - port: 80
+    targetPort: 8080

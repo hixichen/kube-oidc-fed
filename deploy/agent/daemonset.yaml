@@ -1,0 +1,98 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kidring
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kidring-agent
+  namespace: kidring
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: kidring-agent
+  namespace: kidring
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "create", "update", "patch"]
+- apiGroups: ["authentication.k8s.io"]
+  resources: ["tokenreviews"]
+  verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: kidring-agent
+  namespace: kidring
+subjects:
+- kind: ServiceAccount
+  name: kidring-agent
+  namespace: kidring
+roleRef:
+  kind: Role
+  name: kidring-agent
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kidring-agent
+  namespace: kidring
+spec:
+  selector:
+    matchLabels:
+      app: kidring-agent
+  template:
+    metadata:
+      labels:
+        app: kidring-agent
+    spec:
+      serviceAccountName: kidring-agent
+      containers:
+      - name: agent
+        image: kidring-agent:latest
+        ports:
+        - containerPort: 8080
+        env:
+        - name: AGENT_ISSUER
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: issuer
+        - name: AGENT_REGISTRY_URL
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: registry_url
+        - name: AGENT_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kidring-auth
+              key: token
+        - name: AGENT_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: AGENT_CLUSTER_ID
+          valueFrom:
+            configMapKeyRef:
+              name: kidring-config
+              key: cluster_id
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
