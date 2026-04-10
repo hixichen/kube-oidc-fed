@@ -69,6 +69,8 @@ func (r *Registry) DeleteKey(ctx context.Context, kid string) error {
 			beforeCount = len(j.Keys)
 		}
 	}
+	// Fetch key before deletion so we can restore it if safety check fails
+	keyBackup, _ := r.store.GetKey(ctx, kid)
 	if err := r.store.DeleteKey(ctx, kid); err != nil {
 		return fmt.Errorf("delete key: %w", err)
 	}
@@ -78,9 +80,9 @@ func (r *Registry) DeleteKey(ctx context.Context, kid string) error {
 	}
 	afterCount := len(kids)
 	if err := ValidateJWKSDelta(beforeCount, afterCount, r.safety); err != nil {
-		// Restore key
-		if val, getErr := r.store.GetKey(ctx, kid); getErr == nil {
-			_ = r.store.PutKey(ctx, kid, val)
+		// Restore key using the backup fetched before deletion
+		if len(keyBackup) > 0 {
+			_ = r.store.PutKey(ctx, kid, keyBackup)
 		}
 		return fmt.Errorf("safety check: %w", err)
 	}
