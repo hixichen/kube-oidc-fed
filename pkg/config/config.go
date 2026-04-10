@@ -4,7 +4,8 @@ import (
 	"time"
 )
 
-type AgentConfig struct {
+// BrokerConfig holds configuration for the broker.
+type BrokerConfig struct {
 	Issuer              string
 	RegistryURL         string
 	Audience            []string
@@ -16,6 +17,9 @@ type AgentConfig struct {
 	ListenAddr          string
 	RotationInterval    time.Duration
 	RotationGracePeriod time.Duration
+	// JWT claim customization
+	JWTSubjectTemplate string            // default: "system:serviceaccount:{{.Namespace}}:{{.ServiceAccount}}"
+	JWTExtraClaims     map[string]string // additional static claims to inject into JWT
 }
 
 type RegistryConfig struct {

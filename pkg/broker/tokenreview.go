@@ -1,4 +1,4 @@
-package agent
+package broker
 
 import (
 	"context"
@@ -30,7 +30,6 @@ func ValidateToken(ctx context.Context, client kubernetes.Interface, token strin
 	if !result.Status.Authenticated {
 		return nil, fmt.Errorf("token not authenticated: %s", result.Status.Error)
 	}
-	// username is "system:serviceaccount:NAMESPACE:NAME"
 	parts := strings.Split(result.Status.User.Username, ":")
 	var ns, saName string
 	if len(parts) == 4 {

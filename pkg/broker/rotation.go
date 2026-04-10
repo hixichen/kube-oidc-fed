@@ -1,9 +1,10 @@
-package agent
+package broker
 
 import (
 	"context"
-	"log/slog"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 type RotationState string
@@ -19,11 +20,11 @@ type RotationManager struct {
 	state       RotationState
 	interval    time.Duration
 	gracePeriod time.Duration
-	logger      *slog.Logger
+	logger      *zap.Logger
 	onRotate    func(ctx context.Context) error
 }
 
-func NewRotationManager(interval, gracePeriod time.Duration, logger *slog.Logger, onRotate func(ctx context.Context) error) *RotationManager {
+func NewRotationManager(interval, gracePeriod time.Duration, logger *zap.Logger, onRotate func(ctx context.Context) error) *RotationManager {
 	return &RotationManager{
 		state:       StateStable,
 		interval:    interval,
@@ -34,6 +35,9 @@ func NewRotationManager(interval, gracePeriod time.Duration, logger *slog.Logger
 }
 
 func (rm *RotationManager) Start(ctx context.Context) {
+	if rm.interval <= 0 {
+		return // auto-rotation disabled
+	}
 	ticker := time.NewTicker(rm.interval)
 	defer ticker.Stop()
 	for {
@@ -47,17 +51,16 @@ func (rm *RotationManager) Start(ctx context.Context) {
 }
 
 func (rm *RotationManager) rotate(ctx context.Context) {
-	rm.logger.Info("starting key rotation", "state", rm.state)
+	rm.logger.Info("starting key rotation", zap.String("state", string(rm.state)))
 	rm.state = StateDualKey
 	if rm.onRotate != nil {
 		if err := rm.onRotate(ctx); err != nil {
-			rm.logger.Error("rotation failed", "err", err)
+			rm.logger.Error("rotation failed", zap.Error(err))
 			rm.state = StateStable
 			return
 		}
 	}
 	rm.state = StateSwitched
-	// Wait grace period then cleanup
 	select {
 	case <-ctx.Done():
 		return
