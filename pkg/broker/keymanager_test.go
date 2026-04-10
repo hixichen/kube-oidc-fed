@@ -2,12 +2,15 @@ package broker
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	kidcrypto "github.com/hixichen/kube-kidring/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
+	k8stesting "k8s.io/client-go/testing"
 )
 
 func TestLoadOrGenerateKey_GeneratesNew(t *testing.T) {
@@ -165,4 +168,45 @@ _ = key
 _ = kid
 _ = err
 // Just testing no panic
+}
+
+func TestStorePresignedURL_UpdateError(t *testing.T) {
+client := fake.NewClientset(&corev1.Secret{
+ObjectMeta: metav1.ObjectMeta{Name: "my-secret", Namespace: "ns"},
+Data:       map[string][]byte{"kid": []byte("test-kid")},
+})
+// Make update fail
+client.PrependReactor("update", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+return true, nil, fmt.Errorf("update denied")
+})
+err := StorePresignedURL(context.Background(), client, "ns", "my-secret", "http://example.com/upload")
+if err == nil {
+t.Fatal("expected error when update fails")
+}
+}
+
+func TestStoreRotatedKey_GetError(t *testing.T) {
+client := fake.NewClientset()
+// Make get fail with non-404 error
+client.PrependReactor("get", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+return true, nil, fmt.Errorf("permission denied")
+})
+newKey, _ := kidcrypto.GenerateKeyPair()
+newKID, _ := kidcrypto.DeriveKID(&newKey.PublicKey)
+err := StoreRotatedKey(context.Background(), client, "ns", "rot-secret", newKey, newKID)
+if err == nil {
+t.Fatal("expected error when get fails")
+}
+}
+
+func TestStorePresignedURL_DefaultSecretName(t *testing.T) {
+client := fake.NewClientset(&corev1.Secret{
+ObjectMeta: metav1.ObjectMeta{Name: defaultSecretName, Namespace: "ns"},
+Data:       map[string][]byte{"kid": []byte("test-kid")},
+})
+// secretName="" should use defaultSecretName
+err := StorePresignedURL(context.Background(), client, "ns", "", "http://example.com/upload")
+if err != nil {
+t.Fatalf("unexpected error: %v", err)
+}
 }

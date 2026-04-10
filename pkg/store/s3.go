@@ -12,18 +12,54 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+// s3API is the subset of s3.Client methods used by S3Store.
+type s3API interface {
+	PutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.Options)) (*s3.PutObjectOutput, error)
+	GetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.Options)) (*s3.GetObjectOutput, error)
+	DeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
+}
+
+// s3PresignAPI is the subset of s3.PresignClient used by S3Store.
+type s3PresignAPI interface {
+	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3PresignedRequest, error)
+}
+
+// s3PresignedRequest holds the presigned request result.
+type s3PresignedRequest struct {
+	URL string
+}
+
+// realPresigner wraps *s3.PresignClient to implement s3PresignAPI.
+type realPresigner struct {
+	pc *s3.PresignClient
+}
+
+func (r *realPresigner) PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*s3PresignedRequest, error) {
+	req, err := r.pc.PresignPutObject(ctx, params, optFns...)
+	if err != nil {
+		return nil, err
+	}
+	return &s3PresignedRequest{URL: req.URL}, nil
+}
+
 type S3Store struct {
-	client    *s3.Client
-	presigner *s3.PresignClient
+	client    s3API
+	presigner s3PresignAPI
 	bucket    string
 }
 
 func NewS3Store(client *s3.Client, bucket string) *S3Store {
 	return &S3Store{
 		client:    client,
-		presigner: s3.NewPresignClient(client),
+		presigner: &realPresigner{pc: s3.NewPresignClient(client)},
 		bucket:    bucket,
 	}
+}
+
+// newS3StoreWithAPIs creates an S3Store with injectable API clients (for testing).
+func newS3StoreWithAPIs(client s3API, presigner s3PresignAPI, bucket string) *S3Store {
+	return &S3Store{client: client, presigner: presigner, bucket: bucket}
 }
 
 func (s *S3Store) PutKey(ctx context.Context, kid string, jwk []byte) error {

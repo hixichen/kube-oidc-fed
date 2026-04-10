@@ -61,3 +61,32 @@ func TestRotationManagerRotateError(t *testing.T) {
 		t.Fatalf("expected STABLE after error, got %s", rm.State())
 	}
 }
+
+func TestRotationManagerRotateCancelledDuringGrace(t *testing.T) {
+	rm := &RotationManager{
+		state:       StateStable,
+		gracePeriod: 30 * time.Second, // long grace period
+		logger:      zap.NewNop(),
+		onRotate:    nil,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		cancel()
+	}()
+	rm.rotate(ctx) // should return early due to ctx cancel during grace period
+	// Just verify no panic and it returns
+}
+
+func TestRotationManagerNilOnRotate(t *testing.T) {
+	rm := NewRotationManager(50*time.Millisecond, 10*time.Millisecond, zap.NewNop(), nil)
+	if rm.State() != StateStable {
+		t.Fatalf("expected STABLE, got %s", rm.State())
+	}
+	// rotate with nil onRotate should work
+	ctx := context.Background()
+	rm.rotate(ctx)
+	if rm.State() != StateStable {
+		t.Fatalf("expected STABLE after rotate with nil onRotate, got %s", rm.State())
+	}
+}

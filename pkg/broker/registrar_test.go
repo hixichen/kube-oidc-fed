@@ -1,13 +1,14 @@
 package broker
 
 import (
-"context"
-"encoding/json"
-"net/http"
-"net/http/httptest"
-"testing"
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+	"time"
 
-"go.uber.org/zap"
+	"go.uber.org/zap"
 )
 
 func TestRegisterKey_Success(t *testing.T) {
@@ -38,15 +39,18 @@ t.Error("expected non-empty URL")
 }
 
 func TestRegisterKey_RegistryError(t *testing.T) {
-srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-http.Error(w, "server error", http.StatusInternalServerError)
-}))
-defer srv.Close()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "server error", http.StatusInternalServerError)
+	}))
+	defer srv.Close()
 
-_, err := RegisterKey(context.Background(), srv.URL, "token", "kid", []byte(`{}`), zap.NewNop())
-if err == nil {
-t.Fatal("expected error")
-}
+	// Use short timeout context to avoid long retry waits
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	_, err := RegisterKey(ctx, srv.URL, "token", "kid", []byte(`{}`), zap.NewNop())
+	if err == nil {
+		t.Fatal("expected error")
+	}
 }
 
 func TestRegisterKey_ContextCancelled(t *testing.T) {

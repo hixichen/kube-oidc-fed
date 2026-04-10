@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -357,6 +358,53 @@ t.Fatalf("expected 500, got %d", w.Code)
 }
 
 func TestBrokerHandlerRotateRegisterNewKeyError(t *testing.T) {
+	key, _ := kidcrypto.GenerateKeyPair()
+	kid, _ := kidcrypto.DeriveKID(&key.PublicKey)
+
+	var uploadSrv *httptest.Server
+	uploadSrv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer uploadSrv.Close()
+
+	callCount := 0
+	regSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "POST" && r.URL.Path == "/reissue/"+kid {
+			json.NewEncoder(w).Encode(map[string]string{"upload_url": uploadSrv.URL + "/up"})
+			return
+		}
+		// Fail /register for the new key
+		if r.Method == "POST" && r.URL.Path == "/register" {
+			callCount++
+			http.Error(w, "fail", http.StatusInternalServerError)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer regSrv.Close()
+
+	cfg := &config.BrokerConfig{
+		RegistryURL: regSrv.URL,
+		AuthToken:   "tok",
+		Namespace:   "ns",
+		SecretName:  "sec",
+	}
+	client := fake.NewClientset()
+	mux := NewBrokerHandler(client, key, kid, cfg, zap.NewNop())
+	// Use short timeout context to avoid long retry waits
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+	req := httptest.NewRequestWithContext(ctx, "POST", "/admin/rotate", nil)
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	mux.ServeHTTP(w, req)
+	// Should fail since register returns error
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", w.Code)
+	}
+}
+
+func TestBrokerHandlerRotateStoreKeyError(t *testing.T) {
 key, _ := kidcrypto.GenerateKeyPair()
 kid, _ := kidcrypto.DeriveKID(&key.PublicKey)
 
@@ -366,16 +414,17 @@ w.WriteHeader(http.StatusOK)
 }))
 defer uploadSrv.Close()
 
-callCount := 0
 regSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 if r.Method == "POST" && r.URL.Path == "/reissue/"+kid {
 json.NewEncoder(w).Encode(map[string]string{"upload_url": uploadSrv.URL + "/up"})
 return
 }
-// Fail /register for the new key
 if r.Method == "POST" && r.URL.Path == "/register" {
-callCount++
-http.Error(w, "fail", http.StatusInternalServerError)
+json.NewEncoder(w).Encode(map[string]string{"upload_url": uploadSrv.URL + "/up"})
+return
+}
+if r.Method == "PUT" {
+w.WriteHeader(http.StatusOK)
 return
 }
 http.NotFound(w, r)
@@ -385,17 +434,24 @@ defer regSrv.Close()
 cfg := &config.BrokerConfig{
 RegistryURL: regSrv.URL,
 AuthToken:   "tok",
-Namespace:   "ns",
-SecretName:  "sec",
+Namespace:   "test-ns",
+SecretName:  "test-secret",
 }
 client := fake.NewClientset()
+// Make ALL secrets operations (create/update) fail
+client.PrependReactor("create", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+return true, nil, fmt.Errorf("permission denied")
+})
+client.PrependReactor("update", "secrets", func(action k8stesting.Action) (bool, runtime.Object, error) {
+return true, nil, fmt.Errorf("permission denied")
+})
+
 mux := NewBrokerHandler(client, key, kid, cfg, zap.NewNop())
 req := httptest.NewRequest("POST", "/admin/rotate", nil)
 req.Header.Set("Authorization", "Bearer tok")
 w := httptest.NewRecorder()
 mux.ServeHTTP(w, req)
-// Should fail since register returns error
 if w.Code != http.StatusInternalServerError {
-t.Fatalf("expected 500, got %d", w.Code)
+t.Fatalf("expected 500, got %d: %s", w.Code, w.Body.String())
 }
 }
