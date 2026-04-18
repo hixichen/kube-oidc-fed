@@ -501,7 +501,7 @@ data:
 ### Helm Values (Example)
 
 ```yaml
-# kube-oidc-fed-broker
+# kube-oidc-fed-broker values
 broker:
   issuer: "https://token.example.com"
   registry: "https://registry.example.com"
