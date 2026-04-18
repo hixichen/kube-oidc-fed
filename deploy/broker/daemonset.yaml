@@ -1,38 +1,38 @@
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:
-  name: kidring-broker
-  namespace: kidring
+  name: kube-oidc-fed-broker
+  namespace: kube-oidc-fed
 spec:
   selector:
     matchLabels:
-      app: kidring-broker
+      app: kube-oidc-fed-broker
   template:
     metadata:
       labels:
-        app: kidring-broker
+        app: kube-oidc-fed-broker
     spec:
-      serviceAccountName: kidring-broker
+      serviceAccountName: kube-oidc-fed-broker
       containers:
       - name: broker
-        image: kidring-broker:latest
+        image: kube-oidc-fed-broker:latest
         ports:
         - containerPort: 8080
         env:
         - name: BROKER_ISSUER
           valueFrom:
             configMapKeyRef:
-              name: kidring-broker-config
+              name: kube-oidc-fed-broker-config
               key: issuer
         - name: BROKER_REGISTRY_URL
           valueFrom:
             configMapKeyRef:
-              name: kidring-broker-config
+              name: kube-oidc-fed-broker-config
               key: registry_url
         - name: BROKER_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
-              name: kidring-broker-auth
+              name: kube-oidc-fed-broker-auth
               key: token
         - name: BROKER_NAMESPACE
           valueFrom:

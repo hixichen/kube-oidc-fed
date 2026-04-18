@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-# Quick single-container dev run of kidring-registry using in-memory store.
+# Quick single-container dev run of kube-oidc-fed-registry using in-memory store.
 # No docker-compose or MinIO required.
 set -e
 
-IMAGE=${REGISTRY_IMAGE:-kidring-registry:latest}
+IMAGE=${REGISTRY_IMAGE:-kube-oidc-fed-registry:latest}
 PORT=${PORT:-8080}
 AUTH_TOKEN=${REGISTRY_AUTH_TOKEN:-dev-token}
 ISSUER=${REGISTRY_ISSUER:-http://localhost:${PORT}}
 
-echo "Starting kidring-registry (in-memory) on port ${PORT}"
+echo "Starting kube-oidc-fed-registry (in-memory) on port ${PORT}"
 echo "Auth token: ${AUTH_TOKEN}"
 echo "Issuer:     ${ISSUER}"
 

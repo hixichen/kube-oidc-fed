@@ -17,8 +17,8 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	k8stesting "k8s.io/client-go/testing"
 
-	"github.com/hixichen/kube-kidring/pkg/config"
-	kidcrypto "github.com/hixichen/kube-kidring/pkg/crypto"
+	"github.com/hixichen/kube-oidc-fed/pkg/config"
+	kidcrypto "github.com/hixichen/kube-oidc-fed/pkg/crypto"
 	"go.uber.org/zap"
 )
 

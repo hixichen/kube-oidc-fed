@@ -1,7 +1,7 @@
 .PHONY: all build test lint tidy docker-agent docker-registry
 
-AGENT_IMAGE ?= kidring-agent:latest
-REGISTRY_IMAGE ?= kidring-registry:latest
+AGENT_IMAGE ?= kube-oidc-fed-broker:latest
+REGISTRY_IMAGE ?= kube-oidc-fed-registry:latest
 
 all: build
 

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 MINIO_ENDPOINT="${MINIO_ENDPOINT:-http://localhost:9000}"
-BUCKET="${BUCKET:-kidring}"
+BUCKET="${BUCKET:-kube-oidc-fed}"
 
 echo "Setting up MinIO bucket: $BUCKET"
 

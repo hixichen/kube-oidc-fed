@@ -144,9 +144,9 @@ http.Redirect(w, r, "/ui", http.StatusFound)
 
 var uiTemplate = template.Must(template.New("ui").Parse(`<!DOCTYPE html>
 <html>
-<head><title>kidring-registry</title></head>
+<head><title>kube-oidc-fed-registry</title></head>
 <body>
-<h1>kidring-registry</h1>
+<h1>kube-oidc-fed-registry</h1>
 <h2>OIDC Endpoints</h2>
 <ul>
   <li><a href="/.well-known/openid-configuration">OIDC Discovery</a></li>

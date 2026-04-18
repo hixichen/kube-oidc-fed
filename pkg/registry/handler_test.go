@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hixichen/kube-kidring/pkg/store"
+	"github.com/hixichen/kube-oidc-fed/pkg/store"
 	"go.uber.org/zap"
 )
 

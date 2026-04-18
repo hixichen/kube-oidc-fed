@@ -4,7 +4,7 @@ set -euo pipefail
 REGISTRY_URL="${REGISTRY_URL:-http://localhost:8080}"
 AUTH_TOKEN="${AUTH_TOKEN:-local-test-token}"
 
-echo "=== Testing kube-kidring flow ==="
+echo "=== Testing kube-oidc-fed flow ==="
 
 echo "1. Health check"
 curl -sf "$REGISTRY_URL/healthz" && echo " OK"

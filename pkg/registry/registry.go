@@ -6,9 +6,9 @@ import (
 "fmt"
 "time"
 
-"github.com/hixichen/kube-kidring/pkg/jwks"
-"github.com/hixichen/kube-kidring/pkg/oidc"
-"github.com/hixichen/kube-kidring/pkg/store"
+"github.com/hixichen/kube-oidc-fed/pkg/jwks"
+"github.com/hixichen/kube-oidc-fed/pkg/oidc"
+"github.com/hixichen/kube-oidc-fed/pkg/store"
 "go.uber.org/zap"
 )
 

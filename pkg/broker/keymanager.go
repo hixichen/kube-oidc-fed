@@ -5,14 +5,14 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 
-	kidcrypto "github.com/hixichen/kube-kidring/pkg/crypto"
+	kidcrypto "github.com/hixichen/kube-oidc-fed/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-const defaultSecretName = "kidring-signing-key"
+const defaultSecretName = "kube-oidc-fed-signing-key"
 
 func LoadOrGenerateKey(ctx context.Context, client kubernetes.Interface, namespace, secretName string) (*ecdsa.PrivateKey, string, error) {
 	if secretName == "" {

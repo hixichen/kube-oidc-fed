@@ -12,9 +12,9 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/hixichen/kube-kidring/pkg/config"
-	kidcrypto "github.com/hixichen/kube-kidring/pkg/crypto"
-	"github.com/hixichen/kube-kidring/pkg/jwks"
+	"github.com/hixichen/kube-oidc-fed/pkg/config"
+	kidcrypto "github.com/hixichen/kube-oidc-fed/pkg/crypto"
+	"github.com/hixichen/kube-oidc-fed/pkg/jwks"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 )

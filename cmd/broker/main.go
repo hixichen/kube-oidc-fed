@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hixichen/kube-kidring/pkg/broker"
-	"github.com/hixichen/kube-kidring/pkg/config"
+	"github.com/hixichen/kube-oidc-fed/pkg/broker"
+	"github.com/hixichen/kube-oidc-fed/pkg/config"
 	"github.com/spf13/pflag"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -27,8 +27,8 @@ func main() {
 	pflag.String("issuer", "", "OIDC issuer URL")
 	pflag.String("registry-url", "", "Registry URL")
 	pflag.String("cluster-id", "", "Cluster ID")
-	pflag.String("namespace", "kidring", "Namespace")
-	pflag.String("secret-name", "kidring-signing-key", "Secret name")
+	pflag.String("namespace", "kube-oidc-fed", "Namespace")
+	pflag.String("secret-name", "kube-oidc-fed-signing-key", "Secret name")
 	pflag.String("auth-token", "", "Auth token for registry")
 	pflag.String("listen-addr", ":8080", "Listen address")
 	pflag.String("audience", "", "Comma-separated audiences")

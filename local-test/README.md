@@ -1,6 +1,6 @@
 # Local Test Environment
 
-This directory contains scripts and configuration for running kube-kidring locally with MinIO (mock S3) and Vault (OIDC federation testing).
+This directory contains scripts and configuration for running kube-oidc-fed locally with MinIO (mock S3) and Vault (OIDC federation testing).
 
 ## Prerequisites
 
@@ -19,7 +19,7 @@ docker-compose up -d
 # Wait for services to start
 sleep 5
 
-# Set up MinIO bucket (creates 'kidring' bucket with public .well-known/ prefix)
+# Set up MinIO bucket (creates 'kube-oidc-fed' bucket with public .well-known/ prefix)
 ./setup-minio.sh
 
 # Configure Vault JWT auth pointing at the local registry
@@ -37,7 +37,7 @@ REGISTRY_ISSUER=http://localhost:8080 ./setup-vault.sh
 - **Vault**: HashiCorp Vault in dev mode for OIDC federation testing
   - UI: http://localhost:8200
   - Root token: `root`
-- **Registry**: kube-kidring registry service
+- **Registry**: kube-oidc-fed registry service
   - API: http://localhost:8080
 
 ## Credentials
@@ -55,7 +55,7 @@ After running the setup scripts, you can test Vault JWT auth:
 JWT="<your-signed-jwt>"
 
 # Authenticate to Vault using the JWT
-vault write auth/jwt/login role=kidring-test jwt="$JWT"
+vault write auth/jwt/login role=kube-oidc-fed-test jwt="$JWT"
 
 # Read the test secret
 vault kv get secret/test/config
@@ -64,10 +64,10 @@ vault kv get secret/test/config
 ## Architecture
 
 ```
-Workload → kidring-agent (local binary) → POST /token/exchange
+Workload → kube-oidc-fed-broker (local binary) → POST /token/exchange
                                         ← signed JWT
 
-kidring-agent startup:
+kube-oidc-fed-broker startup:
   1. Generate EC P-256 key pair
   2. POST /register → get presigned S3 URL
   3. PUT JWK to MinIO (simulates S3)

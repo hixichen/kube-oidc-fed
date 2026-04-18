@@ -1,55 +1,55 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: kidring
+  name: kube-oidc-fed
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kidring-registry
-  namespace: kidring
+  name: kube-oidc-fed-registry
+  namespace: kube-oidc-fed
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kidring-registry
-  namespace: kidring
+  name: kube-oidc-fed-registry
+  namespace: kube-oidc-fed
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: kidring-registry
+      app: kube-oidc-fed-registry
   template:
     metadata:
       labels:
-        app: kidring-registry
+        app: kube-oidc-fed-registry
     spec:
-      serviceAccountName: kidring-registry
+      serviceAccountName: kube-oidc-fed-registry
       containers:
       - name: registry
-        image: kidring-registry:latest
+        image: kube-oidc-fed-registry:latest
         ports:
         - containerPort: 8080
         env:
         - name: REGISTRY_S3_BUCKET
           valueFrom:
             configMapKeyRef:
-              name: kidring-config
+              name: kube-oidc-fed-config
               key: s3_bucket
         - name: REGISTRY_S3_REGION
           valueFrom:
             configMapKeyRef:
-              name: kidring-config
+              name: kube-oidc-fed-config
               key: s3_region
         - name: REGISTRY_ISSUER
           valueFrom:
             configMapKeyRef:
-              name: kidring-config
+              name: kube-oidc-fed-config
               key: issuer
         - name: REGISTRY_AUTH_TOKEN
           valueFrom:
             secretKeyRef:
-              name: kidring-auth
+              name: kube-oidc-fed-auth
               key: token
         livenessProbe:
           httpGet:
@@ -70,11 +70,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: kidring-registry
-  namespace: kidring
+  name: kube-oidc-fed-registry
+  namespace: kube-oidc-fed
 spec:
   selector:
-    app: kidring-registry
+    app: kube-oidc-fed-registry
   ports:
   - port: 80
     targetPort: 8080
