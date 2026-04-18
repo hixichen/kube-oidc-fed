@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	kidcrypto "github.com/hixichen/kube-kidring/pkg/crypto"
+	kidcrypto "github.com/hixichen/kube-oidc-fed/pkg/crypto"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"

@@ -1,4 +1,4 @@
-module github.com/hixichen/kube-kidring
+module github.com/hixichen/kube-oidc-fed
 
 go 1.25.0
 

@@ -1,8 +1,8 @@
-# kube-kidring: Federated Workload Identity Token Exchange
+# kube-oidc-fed: Federated Workload Identity Token Exchange
 
 ## TL;DR
 
-kube-kidring enables pods on any number of Kubernetes clusters to obtain cloud provider credentials (AWS/GCP) via a single OIDC identity provider — without per-cluster OIDC registration. It has two components:
+kube-oidc-fed enables pods on any number of Kubernetes clusters to obtain cloud provider credentials (AWS/GCP) via a single OIDC identity provider — without per-cluster OIDC registration. It has two components:
 
 1. **Agent** (per-cluster): Generates a cluster-unique signing key pair, uploads the public key to the registry, validates local K8s ServiceAccount tokens, and signs federated JWTs.
 2. **Registry** (central, S3-backed): Accepts public key uploads via pre-signed URLs, builds and serves the JWKS and OIDC discovery endpoints that AWS/GCP consume for federation.
@@ -38,7 +38,7 @@ We cannot assume uniform OIDC issuer configuration across clusters — each clus
 
 ```
                     ┌──────────────────────────────────────┐
-                    │         kube-kidring Registry         │
+                    │         kube-oidc-fed Registry         │
                     │     (Deployment, outside clusters)    │
                     │                                      │
                     │  ┌────────────────────────────────┐  │
@@ -67,7 +67,7 @@ We cannot assume uniform OIDC issuer configuration across clusters — each clus
 │ (Provider A)      │ │ (Provider B)     │ │ (Provider C)     │
 │                   │ │                  │ │                  │
 │ ┌───────────────┐ │ │ ┌──────────────┐ │ │ ┌──────────────┐ │
-│ │ kidring-agent │ │ │ │ kidring-agent│ │ │ │ kidring-agent│ │
+│ │ kube-oidc-fed-broker │ │ │ │ kube-oidc-fed-broker│ │ │ │ kube-oidc-fed-broker│ │
 │ │               │ │ │ │              │ │ │ │              │ │
 │ │ - generates   │ │ │ │ - generates  │ │ │ │ - generates  │ │
 │ │   key pair    │ │ │ │   key pair   │ │ │ │   key pair   │ │
@@ -84,7 +84,7 @@ We cannot assume uniform OIDC issuer configuration across clusters — each clus
 
 ---
 
-## Component 1: kidring-agent (In-Cluster)
+## Component 1: kube-oidc-fed-broker (In-Cluster)
 
 Runs as a Deployment in each workload cluster. Responsible for key generation, public key registration, and local JWT signing.
 
@@ -142,15 +142,15 @@ Key Persistence:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: kidring-agent
-  namespace: kidring-system
+  name: kube-oidc-fed-broker
+  namespace: kube-oidc-fed-system
 spec:
   replicas: 2
   template:
     spec:
       containers:
       - name: agent
-        image: ghcr.io/org/kube-kidring-agent:latest
+        image: ghcr.io/org/kube-oidc-fed-agent:latest
         args:
           - --issuer=https://token.example.com
           - --registry=https://registry.example.com
@@ -161,13 +161,13 @@ spec:
           - name: CLUSTER_ID
             valueFrom:
               configMapKeyRef:
-                name: kidring-config
+                name: kube-oidc-fed-config
                 key: cluster-id
 ```
 
 ---
 
-## Component 2: kidring-registry (Outside Clusters)
+## Component 2: kube-oidc-fed-registry (Outside Clusters)
 
 A lightweight service backed by S3. Two responsibilities: accept public key uploads from agents, and serve OIDC discovery + JWKS endpoints for cloud providers.
 
@@ -201,7 +201,7 @@ GET    /.well-known/jwks.json
 ### S3 Bucket Layout
 
 ```
-s3://kidring-registry/
+s3://kube-oidc-fed-registry/
   ├── .well-known/
   │   ├── openid-configuration        # static OIDC discovery JSON
   │   └── jwks.json                   # aggregated JWKS (rebuilt on key changes)
@@ -216,7 +216,7 @@ s3://kidring-registry/
 When a key is added or removed, the registry rebuilds `jwks.json`:
 
 ```
-1. List all objects under s3://kidring-registry/keys/
+1. List all objects under s3://kube-oidc-fed-registry/keys/
 2. Read each JWK JSON
 3. Aggregate into JWKS: { "keys": [ ...all JWKs... ] }
 4. Run safety validation (see below)
@@ -252,7 +252,7 @@ The registry needs to authenticate agents to prevent unauthorized key registrati
 
 ```
 ┌──────────┐    ┌──────────────┐    ┌───────────┐    ┌─────────┐
-│ Workload │    │ kidring-agent│    │  AWS STS  │    │ AWS S3  │
+│ Workload │    │ kube-oidc-fed-broker│    │  AWS STS  │    │ AWS S3  │
 │ Pod      │    │ (in-cluster) │    │           │    │ (target)│
 └────┬─────┘    └──────┬───────┘    └─────┬─────┘    └────┬────┘
      │                 │                  │               │
@@ -476,7 +476,7 @@ def generate_upload_url(kid: str) -> str:
     return s3.generate_presigned_url(
         "put_object",
         Params={
-            "Bucket": "kidring-registry",
+            "Bucket": "kube-oidc-fed-registry",
             "Key": f"keys/{kid}.json",
             "ContentType": "application/json",
         },
@@ -490,8 +490,8 @@ def generate_upload_url(kid: str) -> str:
 apiVersion: v1
 kind: Secret
 metadata:
-  name: kidring-signing-key
-  namespace: kidring-system
+  name: kube-oidc-fed-signing-key
+  namespace: kube-oidc-fed-system
 type: Opaque
 data:
   private-key.pem: <base64-encoded-EC-private-key>
@@ -501,7 +501,7 @@ data:
 ### Helm Values (Example)
 
 ```yaml
-# kidring-agent
+# kube-oidc-fed-broker
 agent:
   issuer: "https://token.example.com"
   registry: "https://registry.example.com"
@@ -509,12 +509,12 @@ agent:
   tokenTTL: "15m"
   clusterId: "us-east-cluster-07"
   registrationToken:
-    secretName: "kidring-registration-token"
+    secretName: "kube-oidc-fed-registration-token"
 
-# kidring-registry
+# kube-oidc-fed-registry
 registry:
   s3:
-    bucket: "kidring-registry"
+    bucket: "kube-oidc-fed-registry"
     region: "us-east-1"
   domain: "token.example.com"
   cloudfront:

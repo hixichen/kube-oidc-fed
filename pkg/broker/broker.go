@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/hixichen/kube-kidring/pkg/config"
-	"github.com/hixichen/kube-kidring/pkg/jwks"
+	"github.com/hixichen/kube-oidc-fed/pkg/config"
+	"github.com/hixichen/kube-oidc-fed/pkg/jwks"
 	"go.uber.org/zap"
 	"k8s.io/client-go/kubernetes"
 )

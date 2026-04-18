@@ -1,11 +1,11 @@
-# kube-kidring: Staged Implementation Plan
+# kube-oidc-fed: Staged Implementation Plan
 
 ## Overview
 
-This document defines a staged implementation plan for `kube-kidring`, a federated workload identity token exchange system. The project consists of two main components:
+This document defines a staged implementation plan for `kube-oidc-fed`, a federated workload identity token exchange system. The project consists of two main components:
 
-1. **kidring-agent** — runs per-cluster, generates signing keys, registers public keys, and signs federated JWTs for workloads.
-2. **kidring-registry** — runs centrally, manages public key registration, and serves OIDC discovery + JWKS endpoints backed by S3.
+1. **kube-oidc-fed-broker** — runs per-cluster, generates signing keys, registers public keys, and signs federated JWTs for workloads.
+2. **kube-oidc-fed-registry** — runs centrally, manages public key registration, and serves OIDC discovery + JWKS endpoints backed by S3.
 
 **Language**: Go (Golang)
 **Key Libraries**:
@@ -26,10 +26,10 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 ### Tasks
 
-- [ ] Initialize Go module (`go mod init github.com/hixichen/kube-kidring`)
+- [ ] Initialize Go module (`go mod init github.com/hixichen/kube-oidc-fed`)
 - [ ] Define project directory layout:
   ```
-  kube-kidring/
+  kube-oidc-fed/
   ├── cmd/
   │   ├── agent/          # agent entrypoint
   │   │   └── main.go
@@ -99,7 +99,7 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 ---
 
-## Stage 1: kidring-registry — Core API & S3 Storage
+## Stage 1: kube-oidc-fed-registry — Core API & S3 Storage
 
 **Goal**: Implement the registry as a standalone HTTP server that accepts key registrations and serves OIDC endpoints.
 
@@ -164,7 +164,7 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 ---
 
-## Stage 2: kidring-agent — Key Management & Registration
+## Stage 2: kube-oidc-fed-broker — Key Management & Registration
 
 **Goal**: Implement the agent's startup lifecycle: key generation, persistence in K8s Secrets, and public key registration with the registry.
 
@@ -172,7 +172,7 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 - [ ] Implement `pkg/agent/keymanager.go` — key lifecycle:
   - `LoadOrGenerateKey(ctx context.Context, client kubernetes.Interface, namespace, secretName string) (*ecdsa.PrivateKey, string, error)`
-    - Try to load private key from K8s Secret `kidring-signing-key`
+    - Try to load private key from K8s Secret `kube-oidc-fed-signing-key`
     - If not found, generate new EC P-256 key pair
     - Store private key + `kid` in K8s Secret
     - Return private key and kid
@@ -195,8 +195,8 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
   - Initialize agent, start server
   - Graceful shutdown
 - [ ] RBAC manifests (`deploy/agent/`):
-  - ServiceAccount `kidring-agent`
-  - Role: `get`, `create`, `update` on Secrets in `kidring-system`
+  - ServiceAccount `kube-oidc-fed-broker`
+  - Role: `get`, `create`, `update` on Secrets in `kube-oidc-fed-system`
   - Role: `create` on `tokenreviews` (authentication.k8s.io/v1)
   - RoleBinding + ClusterRoleBinding
 - [ ] Write unit tests with fake K8s clientset (`k8s.io/client-go/kubernetes/fake`)
@@ -210,7 +210,7 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 ---
 
-## Stage 3: kidring-agent — Token Exchange Endpoint
+## Stage 3: kube-oidc-fed-broker — Token Exchange Endpoint
 
 **Goal**: Implement the runtime token exchange: pods present K8s SA tokens, agent validates and returns signed federated JWTs.
 
@@ -322,13 +322,13 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
   - Token exchange events: success, failure (with reason), latency
   - JWKS rebuild events: success, failure, key count
 - [ ] Prometheus metrics:
-  - `kidring_agent_token_exchange_total` (counter, labels: status, namespace)
-  - `kidring_agent_token_exchange_duration_seconds` (histogram)
-  - `kidring_agent_key_age_seconds` (gauge)
-  - `kidring_agent_key_rotation_total` (counter, labels: status)
-  - `kidring_registry_jwks_rebuild_total` (counter, labels: status)
-  - `kidring_registry_jwks_key_count` (gauge)
-  - `kidring_registry_key_registration_total` (counter, labels: status)
+  - `kube_oidc_fed_broker_token_exchange_total` (counter, labels: status, namespace)
+  - `kube_oidc_fed_broker_token_exchange_duration_seconds` (histogram)
+  - `kube_oidc_fed_broker_key_age_seconds` (gauge)
+  - `kube_oidc_fed_broker_key_rotation_total` (counter, labels: status)
+  - `kube_oidc_fed_registry_jwks_rebuild_total` (counter, labels: status)
+  - `kube_oidc_fed_registry_jwks_key_count` (gauge)
+  - `kube_oidc_fed_registry_key_registration_total` (counter, labels: status)
 - [ ] Leader election for agent (using `k8s.io/client-go/tools/leaderelection`):
   - Only the leader performs key registration and rotation
   - All replicas serve token exchange
@@ -362,11 +362,11 @@ This document defines a staged implementation plan for `kube-kidring`, a federat
 
 ### Tasks
 
-- [ ] Helm chart for agent (`charts/kidring-agent/`):
+- [ ] Helm chart for agent (`charts/kube-oidc-fed-broker/`):
   - Parameterized: issuer, registry URL, audience, cluster ID, token TTL, image, replicas
   - RBAC, ServiceAccount, ConfigMap, Secret references
   - Optional: PDB, NetworkPolicy, monitoring ServiceMonitor
-- [ ] Helm chart for registry (`charts/kidring-registry/`):
+- [ ] Helm chart for registry (`charts/kube-oidc-fed-registry/`):
   - Parameterized: S3 bucket, region, issuer domain, auth config, safety thresholds
   - Optional: Ingress, TLS, CloudFront invalidation config
 - [ ] GitHub Actions CI pipeline:
