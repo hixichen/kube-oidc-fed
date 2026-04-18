@@ -4,7 +4,7 @@
 
 kube-oidc-fed enables pods on any number of Kubernetes clusters to obtain cloud provider credentials (AWS/GCP) via a single OIDC identity provider — without per-cluster OIDC registration. It has two components:
 
-1. **Agent** (per-cluster): Generates a cluster-unique signing key pair, uploads the public key to the registry, validates local K8s ServiceAccount tokens, and signs federated JWTs.
+1. **Broker** (per-cluster): Generates a cluster-unique signing key pair, uploads the public key to the registry, validates local K8s ServiceAccount tokens, and signs federated JWTs.
 2. **Registry** (central, S3-backed): Accepts public key uploads via pre-signed URLs, builds and serves the JWKS and OIDC discovery endpoints that AWS/GCP consume for federation.
 
 Each cluster signs with its own private key (blast radius isolation). All clusters share one OIDC issuer. `kid = sha256(public_key_der)[0:16]`.
@@ -101,9 +101,9 @@ Startup:
 
 Runtime (token exchange):
   1. Pod presents K8s ServiceAccount token
-  2. Agent validates via local TokenReview API
-  3. Agent extracts namespace, service account name
-  4. Agent signs JWT:
+  2. Broker validates via local TokenReview API
+  3. Broker extracts namespace, service account name
+  4. Broker signs JWT:
      header: { alg: ES256, kid: <fingerprint> }
      payload: {
        iss: https://token.example.com,
@@ -116,27 +116,27 @@ Runtime (token exchange):
   6. Pod calls AWS STS AssumeRoleWithWebIdentity directly
 
 Key Persistence:
-  Agent stores its private key in a K8s Secret in its own namespace.
+  Broker stores its private key in a K8s Secret in its own namespace.
   On restart, it loads the existing key rather than generating a new one.
   New key generation only happens on first deploy or explicit rotation.
 ```
 
-### Key Rotation (Agent-Initiated)
+### Key Rotation (Broker-Initiated)
 
 ```
-1. Agent generates new key pair
+1. Broker generates new key pair
 2. Compute new_kid = sha256(new_public_key_der)[0:16]
 3. POST /register → upload new public key
    (old key still in JWKS, old kid still valid)
-4. Agent waits for configurable grace period (default: 24h)
+4. Broker waits for configurable grace period (default: 24h)
    to allow AWS/GCP JWKS cache to pick up new key
-5. Agent switches to signing with new key
-6. Agent calls DELETE /keys/{old_kid} on registry
+5. Broker switches to signing with new key
+6. Broker calls DELETE /keys/{old_kid} on registry
    (or: registry auto-expires keys not refreshed within TTL)
-7. Agent deletes old key from K8s Secret
+7. Broker deletes old key from K8s Secret
 ```
 
-### Agent Configuration
+### Broker Configuration
 
 ```yaml
 apiVersion: apps/v1
@@ -149,8 +149,8 @@ spec:
   template:
     spec:
       containers:
-      - name: agent
-        image: ghcr.io/org/kube-oidc-fed-agent:latest
+      - name: broker
+        image: ghcr.io/org/kube-oidc-fed-broker:latest
         args:
           - --issuer=https://token.example.com
           - --registry=https://registry.example.com
@@ -169,18 +169,18 @@ spec:
 
 ## Component 2: kube-oidc-fed-registry (Outside Clusters)
 
-A lightweight service backed by S3. Two responsibilities: accept public key uploads from agents, and serve OIDC discovery + JWKS endpoints for cloud providers.
+A lightweight service backed by S3. Two responsibilities: accept public key uploads from brokers, and serve OIDC discovery + JWKS endpoints for cloud providers.
 
 ### API
 
 ```
 POST   /register
-  Auth: shared secret or mTLS (agent → registry)
+  Auth: shared secret or mTLS (broker → registry)
   Body: { "kid": "a3f8...", "jwk": { ... } }
   Response: { "upload_url": "<S3 pre-signed PUT URL>" }
 
-  The agent then PUTs the JWK JSON directly to S3 via the pre-signed URL.
-  Registry does NOT proxy the key material — agent uploads directly to S3.
+  The broker then PUTs the JWK JSON directly to S3 via the pre-signed URL.
+  Registry does NOT proxy the key material — broker uploads directly to S3.
 
 DELETE /keys/{kid}
   Auth: shared secret or mTLS
@@ -240,11 +240,11 @@ This is a write-time operation, not read-time. The JWKS is a static S3 object se
 
 ### Registry Authentication
 
-The registry needs to authenticate agents to prevent unauthorized key registration. Options (in order of preference):
+The registry needs to authenticate brokers to prevent unauthorized key registration. Options (in order of preference):
 
-1. **Shared bootstrap token**: Agent deployed with a registration token (K8s Secret). Simple. Sufficient for most deployments.
-2. **mTLS**: Agent presents a client certificate. Stronger, but requires cert distribution.
-3. **K8s SA token verification**: Agent sends its own K8s SA token; registry validates it against the cluster's OIDC discovery. Chicken-and-egg problem for the first registration, but works for subsequent operations.
+1. **Shared bootstrap token**: Broker deployed with a registration token (K8s Secret). Simple. Sufficient for most deployments.
+2. **mTLS**: Broker presents a client certificate. Stronger, but requires cert distribution.
+3. **K8s SA token verification**: Broker sends its own K8s SA token; registry validates it against the cluster's OIDC discovery. Chicken-and-egg problem for the first registration, but works for subsequent operations.
 
 ---
 
@@ -395,7 +395,7 @@ assert len(new_keys) >= MINIMUM_EXPECTED_CLUSTERS, "Below minimum key count"
 
 ### Operation Separation
 
-- **Add key**: Automated. Agent calls registry, uploads key, JWKS rebuilt. Low risk.
+- **Add key**: Automated. Broker calls registry, uploads key, JWKS rebuilt. Low risk.
 - **Remove key**: Guarded. Subject to validation checks. Optionally requires manual approval for bulk operations.
 
 ### Monitoring
@@ -437,11 +437,11 @@ If cluster-3 is compromised, the attacker can sign JWTs with any `sub` claim (an
 
 1. **Registry auth model**: Shared bootstrap token is simplest. mTLS is strongest. Which fits the deployment model?
 
-2. **Key expiry**: Should the registry auto-expire keys that haven't been refreshed within a TTL (e.g., 7 days)? This provides automatic cleanup for decommissioned clusters but adds a heartbeat requirement to agents.
+2. **Key expiry**: Should the registry auto-expire keys that haven't been refreshed within a TTL (e.g., 7 days)? This provides automatic cleanup for decommissioned clusters but adds a heartbeat requirement to brokers.
 
 3. **Token TTL**: Recommend 15 minutes. Shorter = less exposure. Longer = fewer exchange calls. Configurable per deployment.
 
-4. **Pre-signed URL scope**: The pre-signed PUT URL should be scoped to `keys/{kid}.json` only (prefix-restricted via `starts-with` condition). Agent cannot write to `jwks.json` or `openid-configuration`.
+4. **Pre-signed URL scope**: The pre-signed PUT URL should be scoped to `keys/{kid}.json` only (prefix-restricted via `starts-with` condition). Broker cannot write to `jwks.json` or `openid-configuration`.
 
 5. **JWKS rebuild trigger**: Rebuild on every key upload (simple, slightly slower)? Or batch with a short delay (e.g., 5s debounce)?
 
@@ -484,7 +484,7 @@ def generate_upload_url(kid: str) -> str:
     )
 ```
 
-### Agent Key Storage (K8s Secret)
+### Broker Key Storage (K8s Secret)
 
 ```yaml
 apiVersion: v1
@@ -502,7 +502,7 @@ data:
 
 ```yaml
 # kube-oidc-fed-broker
-agent:
+broker:
   issuer: "https://token.example.com"
   registry: "https://registry.example.com"
   audience: "sts.amazonaws.com"

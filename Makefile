@@ -1,6 +1,6 @@
-.PHONY: all build test lint tidy docker-agent docker-registry
+.PHONY: all build test lint tidy docker-broker docker-registry
 
-AGENT_IMAGE ?= kube-oidc-fed-broker:latest
+BROKER_IMAGE ?= kube-oidc-fed-broker:latest
 REGISTRY_IMAGE ?= kube-oidc-fed-registry:latest
 
 all: build
@@ -17,13 +17,13 @@ lint:
 tidy:
 	go mod tidy
 
-docker-agent:
-	docker build -f Dockerfile.agent -t $(AGENT_IMAGE) .
+docker-broker:
+	docker build -f Dockerfile.broker -t $(BROKER_IMAGE) .
 
 docker-registry:
 	docker build -f Dockerfile.registry -t $(REGISTRY_IMAGE) .
 
-docker: docker-agent docker-registry
+docker: docker-broker docker-registry
 
 local-up:
 	cd local-test && docker-compose up -d
