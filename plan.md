@@ -31,7 +31,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   ```
   kube-oidc-fed/
   ├── cmd/
-  │   ├── agent/          # agent entrypoint
+  │   ├── broker/          # broker entrypoint
   │   │   └── main.go
   │   └── registry/       # registry entrypoint
   │       └── main.go
@@ -52,9 +52,9 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   │   │   ├── s3_test.go
   │   │   ├── memory.go   # in-memory implementation for testing
   │   │   └── memory_test.go
-  │   ├── agent/          # agent business logic
-  │   │   ├── agent.go
-  │   │   ├── agent_test.go
+  │   ├── broker/          # broker business logic
+  │   │   ├── broker.go
+  │   │   ├── broker_test.go
   │   │   ├── handler.go
   │   │   └── handler_test.go
   │   ├── registry/       # registry business logic
@@ -65,9 +65,9 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   │   └── config/         # shared configuration types
   │       └── config.go
   ├── deploy/
-  │   ├── agent/          # Kubernetes manifests for agent
+  │   ├── broker/          # Kubernetes manifests for broker
   │   └── registry/       # Kubernetes manifests / Helm charts for registry
-  ├── Dockerfile.agent
+  ├── Dockerfile.broker
   ├── Dockerfile.registry
   ├── Makefile
   ├── plan.md
@@ -124,7 +124,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   - `Register(kid string, jwk json.RawMessage) (presignedURL string, err error)`
     - Validates JWK structure
     - Generates S3 pre-signed PUT URL scoped to `keys/{kid}.json`
-    - Returns URL to agent
+    - Returns URL to broker
   - `DeleteKey(kid string) error`
     - Removes key from S3
     - Triggers JWKS rebuild
@@ -157,7 +157,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
 
 ### Deliverables
 - Registry starts, accepts `POST /register`, returns pre-signed URL
-- Agent can upload JWK to S3 via pre-signed URL
+- Broker can upload JWK to S3 via pre-signed URL
 - JWKS is rebuilt after key upload
 - OIDC discovery and JWKS endpoints return valid JSON
 - Safety validation prevents dangerous JWKS updates
@@ -166,11 +166,11 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
 
 ## Stage 2: kube-oidc-fed-broker — Key Management & Registration
 
-**Goal**: Implement the agent's startup lifecycle: key generation, persistence in K8s Secrets, and public key registration with the registry.
+**Goal**: Implement the broker's startup lifecycle: key generation, persistence in K8s Secrets, and public key registration with the registry.
 
 ### Tasks
 
-- [ ] Implement `pkg/agent/keymanager.go` — key lifecycle:
+- [ ] Implement `pkg/broker/keymanager.go` — key lifecycle:
   - `LoadOrGenerateKey(ctx context.Context, client kubernetes.Interface, namespace, secretName string) (*ecdsa.PrivateKey, string, error)`
     - Try to load private key from K8s Secret `kube-oidc-fed-signing-key`
     - If not found, generate new EC P-256 key pair
@@ -180,48 +180,48 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
     - `clientset.CoreV1().Secrets(namespace).Get()`
     - `clientset.CoreV1().Secrets(namespace).Create()`
     - `clientset.CoreV1().Secrets(namespace).Update()`
-- [ ] Implement `pkg/agent/registrar.go` — registry communication:
+- [ ] Implement `pkg/broker/registrar.go` — registry communication:
   - `RegisterKey(ctx context.Context, registryURL, authToken, kid string, jwk []byte) error`
     - POST to `{registryURL}/register` with `{ "kid": "...", "jwk": {...} }`
     - Receive pre-signed URL
     - PUT JWK JSON to pre-signed URL
     - Retry with exponential backoff
-- [ ] Implement `pkg/agent/agent.go` — agent orchestration:
+- [ ] Implement `pkg/broker/broker.go` — broker orchestration:
   - Initialize Kubernetes clientset (in-cluster config via `rest.InClusterConfig()`)
   - Call `LoadOrGenerateKey` → call `RegisterKey`
   - Start HTTP server for token exchange (placeholder endpoint for now)
-- [ ] Implement `cmd/agent/main.go`:
+- [ ] Implement `cmd/broker/main.go`:
   - Parse flags/env: `--issuer`, `--registry`, `--audience`, `--token-ttl`, `--cluster-id`, `--namespace`, `--auth-token-file`
-  - Initialize agent, start server
+  - Initialize broker, start server
   - Graceful shutdown
-- [ ] RBAC manifests (`deploy/agent/`):
+- [ ] RBAC manifests (`deploy/broker/`):
   - ServiceAccount `kube-oidc-fed-broker`
   - Role: `get`, `create`, `update` on Secrets in `kube-oidc-fed-system`
   - Role: `create` on `tokenreviews` (authentication.k8s.io/v1)
   - RoleBinding + ClusterRoleBinding
 - [ ] Write unit tests with fake K8s clientset (`k8s.io/client-go/kubernetes/fake`)
-- [ ] Create `Dockerfile.agent`
+- [ ] Create `Dockerfile.broker`
 
 ### Deliverables
-- Agent generates key pair on first start, persists in K8s Secret
-- Agent loads existing key on restart (no new registration)
-- Agent registers public key with registry via pre-signed URL flow
-- RBAC manifests allow agent to manage its Secret and perform TokenReview
+- Broker generates key pair on first start, persists in K8s Secret
+- Broker loads existing key on restart (no new registration)
+- Broker registers public key with registry via pre-signed URL flow
+- RBAC manifests allow broker to manage its Secret and perform TokenReview
 
 ---
 
 ## Stage 3: kube-oidc-fed-broker — Token Exchange Endpoint
 
-**Goal**: Implement the runtime token exchange: pods present K8s SA tokens, agent validates and returns signed federated JWTs.
+**Goal**: Implement the runtime token exchange: pods present K8s SA tokens, broker validates and returns signed federated JWTs.
 
 ### Tasks
 
-- [ ] Implement `pkg/agent/tokenreview.go`:
+- [ ] Implement `pkg/broker/tokenreview.go`:
   - `ValidateToken(ctx context.Context, client kubernetes.Interface, token string, audience string) (*TokenInfo, error)`
     - Create `TokenReview` via `clientset.AuthenticationV1().TokenReviews().Create()`
     - Extract namespace, service account name from response
     - Return `TokenInfo{ Namespace, ServiceAccount, UID }`
-- [ ] Implement `pkg/agent/handler.go` — HTTP handler for token exchange:
+- [ ] Implement `pkg/broker/handler.go` — HTTP handler for token exchange:
   - `POST /token/exchange`
     - Request body: `{ "token": "<k8s-sa-token>" }` or token in `Authorization` header
     - Validate K8s SA token via TokenReview
@@ -233,19 +233,19 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
       - `exp` = now + configured TTL
       - `iat` = now
       - `nbf` = now
-    - Sign JWT with agent's private key (ES256, kid in header)
+    - Sign JWT with broker's private key (ES256, kid in header)
     - Return `{ "token": "<signed-jwt>", "expires_at": <unix_ts> }`
   - `GET /healthz` — health check
   - `GET /readyz` — ready check (key loaded + registered)
 - [ ] Rate limiting / basic request validation
 - [ ] Implement token exchange client SDK (optional, for pod-side convenience):
-  - `pkg/client/client.go` — simple HTTP client that reads the projected SA token from the default path, calls the agent, and returns the federated JWT
+  - `pkg/client/client.go` — simple HTTP client that reads the projected SA token from the default path, calls the broker, and returns the federated JWT
 - [ ] Write unit tests with mock TokenReview responses
 - [ ] Write integration test: generate key → sign JWT → verify JWT with public key
 
 ### Deliverables
-- Pods can call agent's `/token/exchange` endpoint with their K8s SA token
-- Agent validates the token, signs a federated JWT, and returns it
+- Pods can call broker's `/token/exchange` endpoint with their K8s SA token
+- Broker validates the token, signs a federated JWT, and returns it
 - Returned JWT has correct claims structure matching the spec
 - JWT is verifiable using the JWK in the registry's JWKS
 
@@ -257,7 +257,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
 
 ### Tasks
 
-- [ ] Implement `pkg/agent/rotation.go`:
+- [ ] Implement `pkg/broker/rotation.go`:
   - `RotateKey(ctx context.Context) error`
     - Generate new key pair, derive new kid
     - Register new public key with registry (old key still active in JWKS)
@@ -283,14 +283,14 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
          → CLEANUP (old removed from JWKS)
          → STABLE
   ```
-- [ ] Agent flags:
+- [ ] Broker flags:
   - `--rotation-interval` (default: `0` = disabled)
   - `--rotation-grace-period` (default: `24h`)
 - [ ] Write tests for full rotation lifecycle
-- [ ] Write tests for crash recovery mid-rotation (agent restarts, resumes from state in Secret)
+- [ ] Write tests for crash recovery mid-rotation (broker restarts, resumes from state in Secret)
 
 ### Deliverables
-- Agent can rotate keys with zero-downtime
+- Broker can rotate keys with zero-downtime
 - Old key remains in JWKS during grace period
 - Rotation state persisted in K8s Secret (crash-safe)
 - Manual and automatic rotation triggers
@@ -303,18 +303,18 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
 
 ### Tasks
 
-- [ ] Kubernetes manifests (`deploy/agent/`):
+- [ ] Kubernetes manifests (`deploy/broker/`):
   - Deployment (2 replicas, leader election for rotation)
   - Service (ClusterIP, port 8443)
   - NetworkPolicy (restrict ingress to workload pods only)
   - PodDisruptionBudget
   - ServiceAccount + RBAC
-  - ConfigMap for agent configuration
+  - ConfigMap for broker configuration
 - [ ] Kubernetes manifests (`deploy/registry/`):
   - Deployment
   - Service / Ingress
   - IAM annotations for S3 access (IRSA or equivalent)
-- [ ] TLS for agent server:
+- [ ] TLS for broker server:
   - Serve on HTTPS using cert from K8s Secret or cert-manager
   - Or use a sidecar / service mesh for mTLS
 - [ ] Structured logging (using `slog` or `logr`):
@@ -329,7 +329,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   - `kube_oidc_fed_registry_jwks_rebuild_total` (counter, labels: status)
   - `kube_oidc_fed_registry_jwks_key_count` (gauge)
   - `kube_oidc_fed_registry_key_registration_total` (counter, labels: status)
-- [ ] Leader election for agent (using `k8s.io/client-go/tools/leaderelection`):
+- [ ] Leader election for broker (using `k8s.io/client-go/tools/leaderelection`):
   - Only the leader performs key registration and rotation
   - All replicas serve token exchange
 - [ ] Health and readiness probes:
@@ -341,9 +341,9 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
   - Seccomp profile
   - Resource limits
 - [ ] Write E2E test:
-  - Deploy agent + registry in kind/minikube
+  - Deploy broker + registry in kind/minikube
   - Create workload pod with ServiceAccount
-  - Pod calls agent, receives JWT
+  - Pod calls broker, receives JWT
   - Verify JWT against JWKS endpoint
   - (Optional) Verify JWT against AWS STS in a sandbox account
 
@@ -362,7 +362,7 @@ This document defines a staged implementation plan for `kube-oidc-fed`, a federa
 
 ### Tasks
 
-- [ ] Helm chart for agent (`charts/kube-oidc-fed-broker/`):
+- [ ] Helm chart for broker (`charts/kube-oidc-fed-broker/`):
   - Parameterized: issuer, registry URL, audience, cluster ID, token TTL, image, replicas
   - RBAC, ServiceAccount, ConfigMap, Secret references
   - Optional: PDB, NetworkPolicy, monitoring ServiceMonitor
@@ -401,7 +401,7 @@ Stage 0 (Crypto & Scaffolding)
     │
     ├──→ Stage 1 (Registry)
     │        │
-    │        └──→ Stage 2 (Agent Key Mgmt) ──→ Stage 3 (Token Exchange)
+    │        └──→ Stage 2 (Broker Key Mgmt) ──→ Stage 3 (Token Exchange)
     │                                                │
     │                                                └──→ Stage 4 (Key Rotation)
     │                                                          │
@@ -422,7 +422,7 @@ Stage 0 (Crypto & Scaffolding)
 | JWK library | `go-jose/go-jose/v4` | Battle-tested JOSE implementation |
 | Storage | Interface + S3 impl | Testable with in-memory store, production with S3 |
 | Registry auth (initial) | Shared token | Simplest. Can upgrade to mTLS later |
-| Agent HA | Leader election for mutations, all replicas for reads | Standard K8s pattern |
+| Broker HA | Leader election for mutations, all replicas for reads | Standard K8s pattern |
 
 ## Estimated Timeline
 
@@ -430,7 +430,7 @@ Stage 0 (Crypto & Scaffolding)
 |---|---|---|
 | Stage 0: Scaffolding & Crypto | 2-3 days | — |
 | Stage 1: Registry Core | 3-4 days | Stage 0 |
-| Stage 2: Agent Key Mgmt | 3-4 days | Stage 0, 1 |
+| Stage 2: Broker Key Mgmt | 3-4 days | Stage 0, 1 |
 | Stage 3: Token Exchange | 2-3 days | Stage 2 |
 | Stage 4: Key Rotation | 2-3 days | Stage 3 |
 | Stage 5: Deploy & Observability | 3-5 days | Stage 4 |

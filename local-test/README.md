@@ -51,7 +51,7 @@ REGISTRY_ISSUER=http://localhost:8080 ./setup-vault.sh
 After running the setup scripts, you can test Vault JWT auth:
 
 ```bash
-# Get the signed JWT from a test agent (or use the test-flow.sh output)
+# Get the signed JWT from a test broker (or use the test-flow.sh output)
 JWT="<your-signed-jwt>"
 
 # Authenticate to Vault using the JWT
